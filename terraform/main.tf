@@ -51,3 +51,40 @@ resource "google_project_iam_member" "pipeline_sa_bq_job_user" {
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.service_account.email}"
 }
+
+resource "google_project_service" "required_apis" {
+  for_each = toset([
+    "cloudbuild.googleapis.com",
+     "secretmanager.googleapis.com"
+  ])
+  service = each.key
+  disable_on_destroy = false
+}
+
+resource "google_project_iam_member" "pipeline_sa_logging" {
+  project = var.gcp_project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
+}
+
+resource "google_cloudbuild_trigger" "ingestion_build_trigger" {
+  location = var.gcp_region
+  name     = "ingestion-build-trigger"
+  filename = "ingestion/ingestion.cloudbuild.yaml"
+  service_account = google_service_account.service_account.id
+
+  
+  repository_event_config {
+    repository =  "projects/${var.gcp_project_id}/locations/${var.gcp_region}/connections/github-connection/repositories/0ladayo-orbital-telemetry-pipeline"
+    push {
+      branch = "^main$"
+      }
+      }
+  
+  substitutions = {
+    _LOCATION = var.gcp_region
+    _PROJECT_ID = var.gcp_project_id
+    _SERVICE_ACCOUNT_EMAIL = google_service_account.service_account.email
+  }
+
+}
