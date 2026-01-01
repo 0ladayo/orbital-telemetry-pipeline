@@ -74,6 +74,7 @@ resource "google_cloudbuild_trigger" "ingestion_build_trigger" {
   filename        = "ingestion/ingestion.cloudbuild.yaml"
   service_account = google_service_account.service_account.id
 
+  included_files = ["ingestion/**"]
 
   repository_event_config {
     repository = "projects/${var.gcp_project_id}/locations/${var.gcp_region}/connections/github-connection/repositories/0ladayo-orbital-telemetry-pipeline"
