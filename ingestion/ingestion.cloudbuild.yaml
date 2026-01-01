@@ -14,6 +14,6 @@ steps:
   - --memory=2Gi
   - --timeout=540
   - --ingress-settings=internal-only
-   - --service-account=${_SERVICE_ACCOUNT_EMAIL}
+  - --service-account=${_SERVICE_ACCOUNT_EMAIL}
 options:
   logging: CLOUD_LOGGING_ONLY
