@@ -1,0 +1,19 @@
+steps:
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  args:
+  - gcloud
+  - functions
+  - deploy
+  - orbital-telemetry-pipeline
+  - --gen2
+  - --region=${_LOCATION}
+  - --source=./ingestion
+  - --trigger-http
+  - --runtime=python313
+  - --entry-point=main
+  - --memory=2Gi
+  - --timeout=540
+  - --ingress-settings=internal-only
+   - --service-account=${_SERVICE_ACCOUNT_EMAIL}
+options:
+  logging: CLOUD_LOGGING_ONLY
