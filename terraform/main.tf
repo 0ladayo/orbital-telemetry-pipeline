@@ -152,3 +152,28 @@ resource "google_pubsub_topic_iam_member" "member" {
   role = "roles/pubsub.publisher"
   member = "serviceAccount:${google_service_account.service_account.email}"
 }
+
+resource "google_cloudbuild_trigger" "transformation_build_trigger" {
+  location        = var.gcp_region
+  name            = "transformation-build-trigger"
+  filename        = "transformation/transformation.cloudbuild.yaml"
+  service_account = google_service_account.service_account.id
+
+  included_files = ["transformation/**"]
+
+  repository_event_config {
+    repository = "projects/${var.gcp_project_id}/locations/${var.gcp_region}/connections/github-connection/repositories/0ladayo-orbital-telemetry-pipeline"
+    push {
+      branch = "^main$"
+    }
+  }
+
+  substitutions = {
+    _LOCATION              = var.gcp_region
+    _PROJECT_ID            = var.gcp_project_id
+    _SERVICE_ACCOUNT_EMAIL = google_service_account.service_account.email
+    _BIGQUERY_DATASET      = google_bigquery_dataset.dataset.dataset_id
+    _PUBSUB_TOPIC          = var.pubsub_topic
+  }
+
+}

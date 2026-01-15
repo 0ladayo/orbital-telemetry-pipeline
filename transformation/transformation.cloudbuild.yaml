@@ -1,0 +1,19 @@
+steps:
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  args:
+  - gcloud
+  - functions
+  - deploy
+  - transformation-function
+  - --gen2
+  - --region=${_LOCATION}
+  - --source=./transformation
+  - --trigger-topic=${_PUBSUB_TOPIC}
+  - --runtime=python313
+  - --entry-point=main
+  - --memory=2Gi
+  - --timeout=540
+  - --service-account=${_SERVICE_ACCOUNT_EMAIL}
+  - --set-env-vars=PYTHONUNBUFFERED=True,BIGQUERY__DATASET=${_BIGQUERY_DATASET},PROJECT__ID=${_PROJECT_ID}
+options:
+  logging: CLOUD_LOGGING_ONLY
