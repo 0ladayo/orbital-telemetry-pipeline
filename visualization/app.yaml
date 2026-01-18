@@ -8,5 +8,5 @@ automatic_scaling:
 entrypoint: gunicorn -b :$PORT main:server --workers 2 --threads 4 --timeout 120
 
 env_variables:
-  GCP_PROJECT_ID: "PROJECT_ID_PLACEHOLDER"
+  PROJECT_ID: "PROJECT_ID_PLACEHOLDER"
   BIGQUERY_DATASET: "DATASET_PLACEHOLDER"
