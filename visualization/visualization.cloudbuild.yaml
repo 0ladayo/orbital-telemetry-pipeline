@@ -4,10 +4,14 @@ steps:
     args:
       - '-c'
       - |
+        # 1. Inject the variables into app.yaml
+        sed -i "s|PROJECT_ID_PLACEHOLDER|${_PROJECT_ID}|g" app.yaml
+        sed -i "s|DATASET_PLACEHOLDER|${_BIGQUERY_DATASET}|g" app.yaml
+        
+        # 2. Deploy (without the invalid flag)
         gcloud app deploy app.yaml \
           --project=${_PROJECT_ID} \
-          --quiet \
-          --set-env-vars=GCP_PROJECT_ID=${_PROJECT_ID},BIGQUERY_DATASET=${_BIGQUERY_DATASET}
+          --quiet
 
     dir: 'visualization'
 

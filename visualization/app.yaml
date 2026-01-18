@@ -1,9 +1,12 @@
-runtime: python310
+runtime: python313
 env: standard
 instance_class: F4  
 
 automatic_scaling:
   max_instances: 3  
 
-
 entrypoint: gunicorn -b :$PORT main:server --workers 2 --threads 4 --timeout 120
+
+env_variables:
+  GCP_PROJECT_ID: "PROJECT_ID_PLACEHOLDER"
+  BIGQUERY_DATASET: "DATASET_PLACEHOLDER"
