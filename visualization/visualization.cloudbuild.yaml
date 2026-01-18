@@ -1,0 +1,16 @@
+steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud app deploy app.yaml \
+          --project=${_PROJECT_ID} \
+          --quiet \
+          --set-env-vars=GCP_PROJECT_ID=${_PROJECT_ID},BIGQUERY_DATASET=${_BIGQUERY_DATASET}
+
+    dir: 'visualization'
+
+timeout: '1200s'
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,9 @@
+runtime: python310
+env: standard
+instance_class: F4  
+
+automatic_scaling:
+  max_instances: 3  
+
+
+entrypoint: gunicorn -b :$PORT main:server --workers 2 --threads 4 --timeout 120
