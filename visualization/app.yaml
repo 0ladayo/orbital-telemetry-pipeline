@@ -10,7 +10,7 @@ entrypoint: gunicorn -b :$PORT main:server --workers 1 --threads 4 --timeout 120
 env_variables:
   PROJECT_ID: "PROJECT_ID_PLACEHOLDER"
   BIGQUERY_DATASET: "DATASET_PLACEHOLDER"
-  STORAGE_BUCKET: "BUCKET_PLACEHOLDER"
+  GCS_BUCKET_NAME: "BUCKET_PLACEHOLDER"
 
 inbound_services:
 - warmup

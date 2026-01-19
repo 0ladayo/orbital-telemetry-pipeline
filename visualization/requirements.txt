@@ -6,3 +6,6 @@ google-cloud-bigquery
 gunicorn
 pyarrow
 plotly
+google-cloud-storage
+numpy
+db-dtypes
