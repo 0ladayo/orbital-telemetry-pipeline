@@ -3,9 +3,9 @@ dash-bootstrap-components
 pandas
 pandas-gbq
 google-cloud-bigquery
-gunicorn
-pyarrow
-plotly
 google-cloud-storage
+gunicorn
+plotly
 numpy
+pyarrow
 db-dtypes
