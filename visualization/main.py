@@ -7,7 +7,6 @@ import pandas as pd
 import pandas_gbq
 import json
 import os
-import sys
 import logging
 import io
 import numpy as np
@@ -19,9 +18,11 @@ from google.cloud import storage
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-PROJECT_ID = os.environ.get('GCP_PROJECT_ID')
+PROJECT_ID = os.environ.get('PROJECT_ID')
 BIGQUERY_DATASET = os.environ.get('BIGQUERY_DATASET')
-GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', f"{PROJECT_ID}-cache" if PROJECT_ID else None)
+GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME')
+
+logging.info(f"Config: PROJECT_ID={PROJECT_ID}, BIGQUERY_DATASET={BIGQUERY_DATASET}, GCS_BUCKET_NAME={GCS_BUCKET_NAME}")
 CACHE_FILENAME = 'orbital_data_cache_v2.parquet'
 KPI_CACHE_FILENAME = 'orbital_kpi_cache.parquet'
 
@@ -145,18 +146,24 @@ def load_data_smart():
                             _traj_lon = df_main[lon_cols].values.astype(np.float32)
                             df_main = df_main.drop(columns=lat_cols + lon_cols)
                         
+                        df_main['_traj_idx'] = np.arange(len(df_main), dtype=np.int32)
+                        
+                        df_main = optimize_dataframe_memory(df_main)
+                        
                         timestamps = pd.date_range(start=pd.Timestamp(today_utc, tz='UTC'), periods=144, freq='10min')
                         
                         loaded_from_gcs = True
-                        logging.info("GCS Parquet Load Complete.")
+                        logging.info(f"GCS Parquet Load Complete. Loaded {len(df_main)} objects, trajectory shape: {_traj_lat.shape}")
             except Exception as e:
                 logging.error(f"GCS Load Failed: {e}")
+                import traceback
+                logging.error(traceback.format_exc())
                 loaded_from_gcs = False
 
         if not loaded_from_gcs:
             logging.info("Downloading from BigQuery (Fallback)...")
             try:
-                q1 = f"SELECT * FROM `{PROJECT_ID}.{BIGQUERY_DATASET}.transformed_orbital_satellites_data`"
+                q1 = f"SELECT * FROM `{BIGQUERY_DATASET}.transformed_orbital_satellites_data`"
                 df_raw = pandas_gbq.read_gbq(q1, project_id=PROJECT_ID)
                 
                 df_raw['Avg_Altitude'] = pd.to_numeric(df_raw['Avg_Altitude'], errors='coerce')
@@ -174,7 +181,7 @@ def load_data_smart():
                 df_main = optimize_dataframe_memory(df_main)
                 df_main['_cache_date'] = str(today_utc)
                 
-                q2 = f"SELECT * FROM `{PROJECT_ID}.{BIGQUERY_DATASET}.orbital_kpis_view`"
+                q2 = f"SELECT * FROM `{BIGQUERY_DATASET}.orbital_kpis_view`"
                 df_kpi_temp = pandas_gbq.read_gbq(q2, project_id=PROJECT_ID)
                 kpi_data = df_kpi_temp.iloc[0].to_dict()
 
@@ -192,7 +199,6 @@ def load_data_smart():
                         bucket = storage_client.bucket(GCS_BUCKET_NAME)
                         bucket.blob(CACHE_FILENAME).upload_from_file(buffer, content_type='application/octet-stream')
                         
-                        # Save KPI
                         buffer_kpi = io.BytesIO()
                         df_kpi_temp.to_parquet(buffer_kpi, engine='pyarrow', compression='snappy')
                         buffer_kpi.seek(0)
@@ -206,6 +212,9 @@ def load_data_smart():
 
             except Exception as e:
                 logging.critical(f"BigQuery Load Failed: {e}")
+                logging.critical(f"PROJECT_ID={PROJECT_ID}, BIGQUERY_DATASET={BIGQUERY_DATASET}, GCS_BUCKET_NAME={GCS_BUCKET_NAME}")
+                import traceback
+                logging.critical(traceback.format_exc())
                 df_main = pd.DataFrame({'Object_Name': ['No Data'], 'Owner': ['N/A'], 'Avg_Altitude': [0], 'Inclination': [0], '_traj_idx': [0], 'Orbit': ['LEO']})
                 _traj_lat = np.zeros((1, 144), dtype=np.float32)
                 _traj_lon = np.zeros((1, 144), dtype=np.float32)
@@ -288,30 +297,72 @@ app.layout = serve_layout
 def reset_slider(n, c): 
     return get_current_time_index() if ctx.triggered_id == 'reset-time-btn' else c
 
-@callback([Output('globe-map', 'figure'), Output('time-display-sidebar', 'children')], [Input('time-slider', 'value'), Input('satellite-search', 'value')])
+@callback(
+    [Output('globe-map', 'figure'), Output('time-display-sidebar', 'children')], 
+    [Input('time-slider', 'value'), Input('satellite-search', 'value')]
+)
 def update_map(time_index, search_name):
-    if time_index is None: time_index = get_current_time_index()
-    if df_main is None: load_data_smart()
+    if time_index is None: 
+        time_index = get_current_time_index()
+    if df_main is None: 
+        load_data_smart()
     
-    if time_index >= 144: time_index = 0
+    time_index = max(0, min(time_index, 143))
     time_str = timestamps[time_index].strftime("%H:%M UTC")
 
     if search_name:
-        mask = df_main['Object_Name'] == search_name
-        idx = df_main.loc[mask, '_traj_idx'].values
-        if len(idx) > 0:
-            lats, lons = _traj_lat[idx, time_index], _traj_lon[idx, time_index]
-            texts, colors, sizes, opacities = [f"🎯 {search_name}"], ['#FFD700'], [20], [1.0]
+        mask = (df_main['Object_Name'].astype(str) == str(search_name))
+        matching_indices = np.where(mask)[0]
+        
+        if len(matching_indices) > 0:
+            lats = _traj_lat[matching_indices, time_index].tolist()
+            lons = _traj_lon[matching_indices, time_index].tolist()
+            texts = [f"{search_name}"]
+            colors = ['#FFD700']
+            sizes = [20]
+            opacities = [1.0]
         else:
             lats, lons, texts, colors, sizes, opacities = [], [], [], [], [], []
     else:
-        lats, lons = _traj_lat[:, time_index], _traj_lon[:, time_index]
-        colors = np.where(df_main['Orbit'] == 'LEO', '#10b981', np.where(df_main['Orbit'] == 'MEO', '#3b82f6', np.where(df_main['Orbit'] == 'GEO', '#ef4444', '#eab308')))
-        texts = df_main['Object_Name'].astype(str) + ' (' + df_main['Owner'].astype(str) + ')'
-        sizes, opacities = [2]*len(lats), [0.7]*len(lats)
+        lats = _traj_lat[:, time_index].tolist()
+        lons = _traj_lon[:, time_index].tolist()
+        
+        orbit_values = df_main['Orbit'].astype(str).values
+        colors = []
+        for orbit in orbit_values:
+            if orbit == 'LEO':
+                colors.append('#10b981')
+            elif orbit == 'MEO':
+                colors.append('#3b82f6')
+            elif orbit == 'GEO':
+                colors.append('#ef4444')
+            else:
+                colors.append('#eab308')
+        
+        texts = (df_main['Object_Name'].astype(str) + ' (' + df_main['Owner'].astype(str) + ')').tolist()
+        sizes = [2] * len(lats)
+        opacities = [0.7] * len(lats)
 
-    fig = go.Figure(go.Scattergeo(lon=lons, lat=lats, text=texts, mode='markers', marker=dict(size=sizes, color=colors, opacity=opacities)))
-    fig.update_layout(geo=dict(projection_type="orthographic", showland=True, landcolor="#111111", showocean=True, oceancolor="#222222", bgcolor="rgba(0,0,0,0)"), title="<b>Globe Overview</b>", margin={"r":0,"t":50,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", template="plotly_dark")
+    fig = go.Figure(go.Scattergeo(
+        lon=lons, 
+        lat=lats, 
+        text=texts, 
+        mode='markers', 
+        marker=dict(size=sizes, color=colors, opacity=opacities)
+    ))
+    fig.update_layout(
+        geo=dict(
+            projection_type="orthographic", 
+            showland=True, landcolor="#111111", 
+            showocean=True, oceancolor="#222222", 
+            showcountries=True, countrycolor="#444444",
+            bgcolor="rgba(0,0,0,0)"
+        ), 
+        title=dict(text="<b>Globe Overview</b>", x=0.02, y=0.95, font=dict(color="black", size=20)),
+        margin={"r":0,"t":50,"l":0,"b":0}, 
+        paper_bgcolor="rgba(0,0,0,0)", 
+        template="plotly_dark"
+    )
     return fig, time_str
 
 if __name__ == '__main__':
